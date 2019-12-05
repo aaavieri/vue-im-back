@@ -35,7 +35,7 @@ CREATE TABLE `t_chat_history` (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`history_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `t_chat_session` (
@@ -48,5 +48,5 @@ CREATE TABLE `t_chat_session` (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
