@@ -1,0 +1,4 @@
+{
+  "logFileDir": "/var/log",
+  "logFileName": "wwx-im.log"
+}
