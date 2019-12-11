@@ -15,8 +15,8 @@ router.post('/refreshToken', function(req, res, next) {
     req.session.token = token
     res.append('token', token)
     res.json(util.getSuccessData({token}))
-    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, current_time(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = current_time(), row_version = row_version + 1 `, [userId, token, expireDate, token, expireDate])
+    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
+      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
     next(error)
@@ -31,27 +31,22 @@ router.get('/getClientList', function(req, res, next) {
   let outCon = null
   const {token} = req.headers
   const {userId} = util.decodeToken(token)
-  const chatSessions = []
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session' +
       ' where user_id = ? and del_flag = 0 order by session_id desc limit 10', [userId])
   }).then(({connection, results, fields}) => {
-    chatSessions.push(...util.transferFromList(results, fields))
-    if (chatSessions.length > 0) {
-      const sessionIdList = chatSessions.map(item => item.sessionId)
+    const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
+    if (sessionIdList.length > 0) {
       const searchHistoryStatement = `select history_id, session_id, message, media, type from t_chat_history where session_id in
-        (${new Array(sessionIdList.length).fill('?').join(', ')}) and del_flag = 0`
+        ${util.getListSql(sessionIdList.length)} and del_flag = 0`
       return db.execute(connection, searchHistoryStatement, sessionIdList)
     } else {
       return Promise.resolve({connection, results: [], fields: []})
     }
   }).then(({results, fields}) => {
     const historyList = util.transferFromList(results, fields)
-    chatSessions.forEach(session => {
-      session.historyList = historyList.filter(history => history.sessionId === session.sessionId)
-    })
-    res.json(util.getSuccessData(chatSessions))
+    res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
   }).catch(error => {
     error.status = 200
     next(error)
@@ -71,7 +66,6 @@ router.post('/searchHistory', function(req, res, next) {
     return
   }
   let outCon = null
-  const chatSessions = []
   db.getConnection().then(connection => {
     outCon = connection
     const statement = `select history_id, session_id, message, media, type from t_chat_history where user_id = ? and
@@ -79,18 +73,14 @@ router.post('/searchHistory', function(req, res, next) {
     const params = openId ? [userId, openId] : [userId]
     return db.execute(connection, statement, [...params, `%${keyWord}%`])
   }).then(({connection, results, fields}) => {
-    chatSessions.push(...util.transferFromList(results, fields))
-    const sessionIdList = chatSessions.map(item => item.sessionId)
+    const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
     const statement = `select history_id, session_id, message, media, type from t_chat_history where session_id in 
       ${util.getListSql(sessionIdList.length)} and ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
     const params = openId ? [...sessionIdList, openId] : sessionIdList
     return db.execute(connection, statement, [...params, `%${keyWord}%`])
   }).then(({results, fields}) => {
     const historyList = util.transferFromList(results, fields)
-    chatSessions.forEach(session => {
-      session.historyList = historyList.filter(history => history.sessionId === session.sessionId)
-    })
-    res.json(util.getSuccessData(chatSessions))
+    res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
   }).catch(error => {
     error.status = 200
     next(error)

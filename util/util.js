@@ -37,6 +37,40 @@ const util = new function () {
     data,
     errMsg
   })
+  this.getWechatSuccessData = (data) => ({
+    errCode : 0,
+    data,
+    errMsg: null
+  })
+  this.groupToObj = (list, key) => {
+    const map = {}
+    const keyExtractor = this.adaptKeyExtractor(key)
+    list.forEach(item => {
+      const key = keyExtractor(item)
+      map[key] = [...(map[key] || []), item]
+    })
+    return map
+  }
+  this.groupToArr = (list, key, dataListName = 'dataList', keySetter = (item, value) => item[key] = value) => {
+    const arr = []
+    const groupObj = this.groupToObj(list, key)
+    Object.keys(groupObj).forEach(value => {
+      const dataItem = {}
+      dataItem[dataListName] = groupObj[value]
+      keySetter(dataItem, value)
+      arr.push(dataItem)
+    })
+    return arr
+  }
+  this.adaptKeyExtractor = (keyExtractor) => {
+    if (keyExtractor instanceof String) {
+      return (item) => item[keyExtractor]
+    } else {
+      return keyExtractor
+    }
+  }
+  this.randomInt = (limit) => Math.floor((Math.random() * limit) + 1)
+  this.randomArr = (arr) => arr[Math.floor(Math.random() * arr.length)]
   this.loginChecker = (req, res, next) => {
     if (req.session.userInfo) {
       return next()

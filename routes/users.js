@@ -23,8 +23,8 @@ router.post('/login', (req, res, next) => {
     Object.assign(req.session, data)
     res.append('token', token)
     res.json(util.getSuccessData(data))
-    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, current_time(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = current_time(), row_version = row_version + 1 `, [userId, token, expireDate, token, expireDate])
+    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
+      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userInfo.userId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
     next(error)
