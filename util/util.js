@@ -103,6 +103,7 @@ const util = new function () {
       }
     })
   }
+  this.getListSql = (length) => length === 0 ? 'false' : `(${new Array(length).fill('?').join(',')})`
 }
 
 module.exports = util
