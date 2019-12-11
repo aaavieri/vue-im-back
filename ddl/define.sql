@@ -32,13 +32,14 @@ CREATE TABLE `t_chat_history` (
   `history_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '流水ID',
   `session_id` int(11) NOT NULL COMMENT '会话ID',
   `message` varchar(100) NULL COMMENT '消息内容',
-  `media` tinyint(1) NOT NULL DEFAULT '0' COMMENT '媒体类型：0：文本，1：图片，2：语音',
+  `messageType` tinyint(1) NOT NULL DEFAULT '0' COMMENT '消息类型：1：文本，2：图片，3：语音',
   `type` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0：客户到客服，1：客服到客户',
   `del_flag` tinyint(1) NOT NULL DEFAULT '0' COMMENT '删除标志',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`history_id`)
+  PRIMARY KEY (`history_id`),
+  KEY `sessionIdx` (`session_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `t_chat_session` (
@@ -51,7 +52,9 @@ CREATE TABLE `t_chat_session` (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`session_id`)
+  PRIMARY KEY (`session_id`),
+  KEY `userIdx` (`user_id`) USING BTREE,
+  KEY `clientIdx` (`open_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `t_client_info` (
@@ -60,6 +63,7 @@ CREATE TABLE `t_client_info` (
   `user_name` varchar(50) NOT NULL COMMENT '客户昵称' default '',
   `avatar` varchar(50) NULL COMMENT '头像地址',
   `phone_num` varchar(11) NULL COMMENT '客户手机号',
+  `user_status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '用户状态',
   `del_flag` tinyint(4) NOT NULL DEFAULT '0' COMMENT '删除标志',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
