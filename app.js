@@ -9,7 +9,7 @@ var bodyPaserXml = require("body-parser-xml");
 var appLogger = require('./logger/appLogger')
 bodyPaserXml(bodyParser)
 
-var clientApiRouter = require('./routes/clientApi');
+var wechatApiRouter = require('./routes/wechatApi');
 var serverApiRouter = require('./routes/serverApi');
 var usersRouter = require('./routes/users');
 
@@ -69,7 +69,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/users', usersRouter);
 app.use('/serverApi', serverApiRouter);
-app.use('/clientApi', clientApiRouter);
+app.use('/wechatApi', wechatApiRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
