@@ -137,7 +137,20 @@ const util = new function () {
       }
     })
   }
-  this.getListSql = (length) => length === 0 ? 'false' : `(${new Array(length).fill('?').join(',')})`
+  this.getListSql = ({length, fillStr = '?', separator = ',', open = '(', close = ')'}) => (
+    length === 0 ? '' : `${open}${new Array(length).fill(fillStr).join(separator)}${close}`
+  )
+  this.cutArray = (array, subLength) => {
+    let index = 0;
+    let newArr = [];
+    while (index < array.length) {
+      newArr.push(array.slice(index, index += subLength));
+    }
+    return newArr;
+  }
+  this.splitMessage = ({sessionId, messageType, message}) => (
+    this.cutArray(message, env.maxMessageLength).map(item => ({sessionId, messageType, message: item}))
+  )
 }
 
 module.exports = util

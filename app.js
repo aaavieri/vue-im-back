@@ -11,6 +11,7 @@ bodyPaserXml(bodyParser)
 
 var wechatApiRouter = require('./routes/wechatApi');
 var serverApiRouter = require('./routes/serverApi');
+var clientApiRouter = require('./routes/clientApi');
 var usersRouter = require('./routes/users');
 
 require('./util/socket');
@@ -69,6 +70,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/users', usersRouter);
 app.use('/serverApi', serverApiRouter);
+app.use('/clientApi', clientApiRouter);
 app.use('/wechatApi', wechatApiRouter);
 
 // catch 404 and forward to error handler

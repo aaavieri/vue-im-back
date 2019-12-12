@@ -39,7 +39,7 @@ router.get('/getClientList', function(req, res, next) {
     const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
     if (sessionIdList.length > 0) {
       const searchHistoryStatement = `select history_id, session_id, message, media, type from t_chat_history where session_id in
-        ${util.getListSql(sessionIdList.length)} and del_flag = 0`
+        ${util.getListSql({length: sessionIdList.length})} and del_flag = 0`
       return db.execute(connection, searchHistoryStatement, sessionIdList)
     } else {
       return Promise.resolve({connection, results: [], fields: []})
@@ -75,7 +75,7 @@ router.post('/searchHistory', function(req, res, next) {
   }).then(({connection, results, fields}) => {
     const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
     const statement = `select history_id, session_id, message, media, type from t_chat_history where session_id in 
-      ${util.getListSql(sessionIdList.length)} and ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
+      ${util.getListSql({length: sessionIdList.length})} and ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
     const params = openId ? [...sessionIdList, openId] : sessionIdList
     return db.execute(connection, statement, [...params, `%${keyWord}%`])
   }).then(({results, fields}) => {

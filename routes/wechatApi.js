@@ -18,28 +18,28 @@ const errorHandler = (err, res) => {
 
 // router.use(util.loginChecker)
 /* GET home page. */
-router.get('/getIMServerList', function(req, res, next) {
-  let outCon = null
-  db.getConnection().then(connection => {
-      outCon = connection
-      return db.execute(connection, 'select user_id, user_pass, user_name, settings from t_user where del_flag = 0', [])
-    }
-  ).then(({connection, results, fields}) => {
-    const data = util.transferFromList(results, fields).map(row => ({
-      serverChatId: `${row.userId}`,
-      serverChatName: row.userName,
-      avatarUrl: ''
-    }))
-    res.json(util.getSuccessData({code: 0, data}))
-    return connection
-  }).then(connection => connection.release()).catch(error => {
-    if (outCon) {
-      outCon.release()
-    }
-    error.status = 200
-    next(error)
-  })
-});
+// router.get('/getIMServerList', function(req, res, next) {
+//   let outCon = null
+//   db.getConnection().then(connection => {
+//       outCon = connection
+//       return db.execute(connection, 'select user_id, user_pass, user_name, settings from t_user where del_flag = 0', [])
+//     }
+//   ).then(({connection, results, fields}) => {
+//     const data = util.transferFromList(results, fields).map(row => ({
+//       serverChatId: `${row.userId}`,
+//       serverChatName: row.userName,
+//       avatarUrl: ''
+//     }))
+//     res.json(util.getSuccessData({code: 0, data}))
+//     return connection
+//   }).then(connection => connection.release()).catch(error => {
+//     if (outCon) {
+//       outCon.release()
+//     }
+//     error.status = 200
+//     next(error)
+//   })
+// });
 
 router.post('/connect', function(req, res, next) {
   let outCon = null
@@ -56,8 +56,8 @@ router.post('/connect', function(req, res, next) {
     if (userIdList.length === 0) {
       throw new WechatError({errMsg: '对不起，暂时没有在线客服人员，请稍后重试。', errCode: 101})
     }
-    return db.execute(connection, `select session_id, server_user_id, open_id from t_chat_session where server_user_id in ${util.getListSql(userIdList.length)} and
-      del_flag = 0 and end_time is not null`, userIdList)
+    return db.execute(connection, `select session_id, server_user_id, open_id from t_chat_session where server_user_id in
+      ${util.getListSql({length: userIdList.length})} and del_flag = 0 and end_time is not null`, userIdList)
   }).then(({connection, results, fields}) => {
     const sessionList = util.transferFromList(results, fields)
     const availableUsers = userList.filter(user => sessionList.filter(session => session.serverUserId === user.serverUserId).length < env.maxSession)
@@ -91,5 +91,41 @@ router.post('/connect', function(req, res, next) {
     }
   })
 });
+
+router.post('/sendMsg', function (req, res, next) {
+  let outCon = null
+  const {sessionId, message, messageType = 1} = req.body
+  if (!message || !messageType) {
+    return res.json(new WechatError({errMsg: '对不起，消息内容不合法。', errCode: 201}))
+  }
+  const createTime = new Date()
+  const messageList = util.splitMessage(req.body)
+  const insertListStatement = '(?, ?, ?, ?)'
+  db.getConnection().then(connection => {
+      const params = []
+      messageList.forEach(({sessionId, message, messageType}) => params.push(sessionId, message, messageType, createTime))
+      outCon = connection
+      return db.execute(connection, `insert into t_chat_history (session_id, message, messageType, create_time) values 
+        ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params)
+    }
+  ).then(({connection}) => {
+    return db.execute(connection, 'select server_user_id, open_id from t_chat_session where session_id = ? and del_flag = 0' +
+      ' and end_time is null', [sessionId])
+  }).then(({results, fields}) => {
+    const sessionList = util.transferFromList(results, fields)
+    if (sessionList.length === 0) {
+      throw new WechatError({errMsg: '对不起，会话不存在或者已过期', errCode: 202})
+    }
+    const session = sessionList[0]
+    wechat.sendMsg({serverUserId: session.serverUserId, openID: session.openId, msg: wechat.wrapMsg({messageType, message})})
+    res.json(util.getWechatSuccessData({}))
+  }).catch(error => {
+    errorHandler(error, res)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 
 module.exports = router;

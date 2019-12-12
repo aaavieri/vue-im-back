@@ -82,8 +82,31 @@ const socketFunc = {
         });
       }
     },
-    sendMsg: () => {
-
+    sendMsg: ({serverUserId, openID, msg}) => {
+      if (serverChatDic.has(serverUserId)) {
+        serverChatDic.get(serverUserId).socket.emit('CLIENT_SEND_MSG', {
+          clientChatEn: {
+            clientChatId: openID
+          },
+          msg
+        });
+      }
+    },
+    wrapMsg: ({message, messageType}) => {
+      let contentType = 'text'
+      switch (messageType) {
+        case 2:
+          contentType = 'image'
+          break
+        case 3:
+          contentType = 'sound'
+          break
+      }
+      return {
+        contentType,
+        content: message,
+        role: 'client'
+      }
     }
   }
 }
