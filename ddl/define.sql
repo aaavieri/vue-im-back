@@ -1,9 +1,9 @@
 CREATE TABLE `t_user` (
-  `user_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '用户ID',
-  `user_account` varchar(10) NOT NULL COMMENT '用户登录用账号',
+  `server_user_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '用户ID',
+  `server_user_account` varchar(10) NOT NULL COMMENT '用户登录用账号',
   `channel_id` int(11) NOT NULL COMMENT '渠道ID',
-  `user_name` varchar(20) NOT NULL COMMENT '用户名称',
-  `user_pass` varchar(50) NOT NULL COMMENT '用户密码',
+  `server_user_name` varchar(20) NOT NULL COMMENT '用户名称',
+  `server_user_pass` varchar(50) NOT NULL COMMENT '用户密码',
   `settings` text COMMENT '用户设置',
   `del_flag` tinyint(4) NOT NULL DEFAULT '0' COMMENT '删除标志',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -11,11 +11,11 @@ CREATE TABLE `t_user` (
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
   `update_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '更新者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`user_id`)
+  PRIMARY KEY (`server_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `t_user_token` (
-  `user_id` int(11) NOT NULL COMMENT '用户ID',
+  `server_user_id` int(11) NOT NULL COMMENT '用户ID',
   `token` varchar(255) NULL COMMENT 'token',
   `login_time` datetime NULL COMMENT '登录时间',
   `expire_time` datetime NULL COMMENT '过期时间',
@@ -25,7 +25,7 @@ CREATE TABLE `t_user_token` (
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
   `update_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '更新者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
-  PRIMARY KEY (`user_id`)
+  PRIMARY KEY (`server_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `t_chat_history` (
@@ -44,7 +44,7 @@ CREATE TABLE `t_chat_history` (
 
 CREATE TABLE `t_chat_session` (
   `session_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '会话ID',
-  `user_id` varchar(10) NOT NULL COMMENT '用户ID',
+  `server_user_id` varchar(10) NOT NULL COMMENT '用户ID',
   `open_id` varchar(50) NOT NULL COMMENT '客户的OPENID',
   `start_time` datetime NOT NULL COMMENT '开始时间',
   `end_time` datetime NULL COMMENT '结束时间',
@@ -53,7 +53,7 @@ CREATE TABLE `t_chat_session` (
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
   PRIMARY KEY (`session_id`),
-  KEY `userIdx` (`user_id`) USING BTREE,
+  KEY `userIdx` (`server_user_id`) USING BTREE,
   KEY `clientIdx` (`open_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 

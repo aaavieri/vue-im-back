@@ -15,7 +15,7 @@ router.post('/refreshToken', function(req, res, next) {
     req.session.token = token
     res.append('token', token)
     res.json(util.getSuccessData({token}))
-    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
+    return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
       on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
@@ -68,7 +68,7 @@ router.post('/searchHistory', function(req, res, next) {
   let outCon = null
   db.getConnection().then(connection => {
     outCon = connection
-    const statement = `select history_id, session_id, message, media, type from t_chat_history where user_id = ? and
+    const statement = `select history_id, session_id, message, media, type from t_chat_history where server_user_id = ? and
       ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
     const params = openId ? [userId, openId] : [userId]
     return db.execute(connection, statement, [...params, `%${keyWord}%`])

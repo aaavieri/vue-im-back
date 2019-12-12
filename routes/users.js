@@ -12,19 +12,20 @@ router.post('/login', (req, res, next) => {
   let outCon = null
   db.getConnection().then(connection => {
     outCon = connection
-    return db.execute(connection, 'select user_id, user_account, channel_id, user_pass, user_name, settings from t_user where user_id = ? and del_flag = 0', [userAccount])
+    return db.execute(connection, 'select server_user_id, server_user_account, channel_id, server_user_pass, server_user_name, settings from t_user' +
+      ' where server_user_id = ? and del_flag = 0', [userAccount])
   }).then(({connection, results, fields}) => {
     const [userInfo = {}] = util.transferFromList(results, fields)
-    if (userInfo.userPass !== password) {
+    if (userInfo.serverUserPass !== password) {
       throw new Error('不存在用户或密码错误')
     }
-    const {token, expireDate} = util.encodeToken({userId: userInfo.userId, channelId: userInfo.channelId})
+    const {token, expireDate} = util.encodeToken({userId: userInfo.serverUserId, channelId: userInfo.channelId})
     const data = {userInfo, token}
     Object.assign(req.session, data)
     res.append('token', token)
     res.json(util.getSuccessData(data))
-    return db.execute(connection, `insert into t_user_token (user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userInfo.userId, token, expireDate, token, expireDate])
+    return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
+      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userInfo.serverUserId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
     next(error)

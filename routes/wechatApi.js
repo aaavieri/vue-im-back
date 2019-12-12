@@ -4,6 +4,7 @@ const util = require('../util/util');
 const db = require('../db/db');
 const env = require('../config/env');
 const error = require('../util/error');
+const {wechat} = require('../util/socket');
 
 const {WechatError} = error
 
@@ -46,40 +47,41 @@ router.post('/connect', function(req, res, next) {
   const {openID, channelID, userStatus, userName, avatar, phoneNum} = req.body
   db.getConnection().then(connection => {
       outCon = connection
-      return db.execute(connection, 'select u.user_id, u.user_name from t_user u inner join t_user_token t on (u.user_id = t.user_id)' +
+      return db.execute(connection, 'select u.server_user_id, u.server_user_name from t_user u inner join t_user_token t on (u.server_user_id = t.server_user_id)' +
         ' where u.channel_id = ? and t.del_flag = 0 and u.del_flag = 0 and t.expire_time > sysdate()', [channelID])
     }
   ).then(({connection, results, fields}) => {
     userList = util.transferFromList(results, fields)
-    const userIdList = userList.map(data => data.userId)
+    const userIdList = userList.map(data => data.serverUserId)
     if (userIdList.length === 0) {
       throw new WechatError({errMsg: '对不起，暂时没有在线客服人员，请稍后重试。', errCode: 101})
     }
-    return db.execute(connection, `select session_id, user_id, open_id from t_chat_session where user_id in ${util.getListSql(userIdList.length)}
+    return db.execute(connection, `select session_id, server_user_id, open_id from t_chat_session where server_user_id in ${util.getListSql(userIdList.length)} and
       del_flag = 0 and end_time is not null`, userIdList)
   }).then(({connection, results, fields}) => {
     const sessionList = util.transferFromList(results, fields)
-    const users = util.groupToArr(sessionList, 'userId', 'sessionList').filter(user => user.sessionList.length < env.maxSession)
-    if (users.length === 0) {
+    const availableUsers = userList.filter(user => sessionList.filter(session => session.serverUserId === user.serverUserId).length < env.maxSession)
+    if (availableUsers.length === 0) {
       throw new WechatError({errMsg: '对不起，已达到客服服务上限，请稍后重试。', errCode: 102})
     }
-    const randomUserId = util.randomArr(users).userId
-    const randomUser = userList.find(user => user.userId === randomUserId)
+    const randomUserId = util.randomArr(availableUsers).serverUserId
+    const randomUser = userList.find(user => user.serverUserId === randomUserId)
     return Promise.all([
-      db.execute(connection, 'insert into t_chat_session (user_id, open_id, start_time) values (?, ?, sysdate())', [randomUserId, openID]),
+      db.execute(connection, 'insert into t_chat_session (server_user_id, open_id, start_time) values (?, ?, sysdate())', [randomUserId, openID]),
       Promise.resolve(randomUser),
       db.execute(connection, 'insert into t_client_info (channel_id, open_id, user_name, avatar, phone_num, user_status) values (?, ?, ?, ?, ?, ?)'
         + 'on duplicate key update user_name = ?, avatar = ?, phone_num = ?, user_status = ?, update_time = sysdate(), row_version = row_version + 1',
         [channelID, openID, userName, avatar, phoneNum, userStatus, userName, avatar, phoneNum, userStatus])
     ])
-  }).then(([{results: {insertId: sessionId = 0}}, {userId, userName}]) => {
+  }).then(([{results: {insertId: sessionId = 0}}, {serverUserId, serverUserName}]) => {
     if (!sessionId) {
       throw new WechatError({errMsg: '对不起，客服会话建立失败，请稍后重试。', errCode: 103})
     }
+    wechat.connect({serverUserId, openID, userName, avatar, phoneNum})
     res.json(util.getWechatSuccessData({
       sessionId,
-      servicerId: userId,
-      servicerName: userName
+      servicerId: serverUserId,
+      servicerName: serverUserName
     }))
   }).catch(error => {
     errorHandler(error, res)

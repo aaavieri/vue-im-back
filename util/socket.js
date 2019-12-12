@@ -4,6 +4,7 @@ var server = require('http').createServer();
 var io = require('socket.io')(server);
 var serverChatDic = new Map(); // 服务端
 var clientChatDic = new Map(); // 客户端
+var wechatChatDic = new Map(); // 客户端
 io.on('connection', function(socket) {
   // 服务端上线
   socket.on('SERVER_ON', function(data) {
@@ -68,4 +69,23 @@ io.on('connection', function(socket) {
 });
 server.listen(3001);
 
-// module.exports = server
+const socketFunc = {
+  wechat: {
+    connect: ({serverUserId, openID, userName, ...data}) => {
+      if (serverChatDic.has(serverUserId)) {
+        serverChatDic.get(serverUserId).socket.emit('CLIENT_ON', {
+          clientChatEn: {
+            clientChatId: openID,
+            clientChatName: userName
+          },
+          data
+        });
+      }
+    },
+    sendMsg: () => {
+
+    }
+  }
+}
+
+module.exports = socketFunc
