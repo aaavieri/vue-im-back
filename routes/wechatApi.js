@@ -3,10 +3,8 @@ var router = express.Router();
 const util = require('../util/util');
 const db = require('../db/db');
 const env = require('../config/env');
-const error = require('../util/error');
+const {WechatError} = require('../util/error');
 const {wechat} = require('../util/socket');
-
-const {WechatError} = error
 
 const errorHandler = (err, res) => {
   if (err instanceof WechatError) {
@@ -98,26 +96,43 @@ router.post('/sendMsg', function (req, res, next) {
   if (!message || !messageType) {
     return res.json(new WechatError({errMsg: '对不起，消息内容不合法。', errCode: 201}))
   }
-  const createTime = new Date()
-  const messageList = util.splitMessage(req.body)
-  const insertListStatement = '(?, ?, ?, ?)'
+  let session = null
   db.getConnection().then(connection => {
-      const params = []
-      messageList.forEach(({sessionId, message, messageType}) => params.push(sessionId, message, messageType, createTime))
-      outCon = connection
-      return db.execute(connection, `insert into t_chat_history (session_id, message, messageType, create_time) values 
-        ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params)
-    }
-  ).then(({connection}) => {
     return db.execute(connection, 'select server_user_id, open_id from t_chat_session where session_id = ? and del_flag = 0' +
       ' and end_time is null', [sessionId])
-  }).then(({results, fields}) => {
+  }).then(({connection, results, fields}) => {
     const sessionList = util.transferFromList(results, fields)
     if (sessionList.length === 0) {
       throw new WechatError({errMsg: '对不起，会话不存在或者已过期', errCode: 202})
     }
-    const session = sessionList[0]
-    wechat.sendMsg({serverUserId: session.serverUserId, openID: session.openId, msg: wechat.wrapMsg({messageType, message})})
+    session = sessionList[0]
+    return util.saveMessage({connection, message, messageType, sessionId})
+  }).then(({createTime, historyId}) => {
+    wechat.sendMsg({serverUserId: session.serverUserId, openID: session.openId, msg: wechat.wrapMsg({messageType, message, createTime, historyId})})
+    res.json(util.getWechatSuccessData({}))
+  }).catch(error => {
+    errorHandler(error, res)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
+
+router.post('/appraise', function (req, res, next) {
+  const {sessionId, rank} = req.body
+  if (!rank || rank > 3) {
+      return res.json(new WechatError({errMsg: '没有评分或评分超出范围', errCode: 601}))
+  }
+  let outCon = null
+  db.getConnection().then(connection => {
+      outCon = connection
+      return db.execute(connection, 'update t_chat_session set rank = ? where session_id = ? and del_flag = 0', [rank, sessionId])
+    }
+  ).then(({results: {changedRows = 0}}) => {
+    if (!changedRows) {
+      throw new WechatError({errMsg: '找不到评分的客服会话', errCode: 602})
+    }
     res.json(util.getWechatSuccessData({}))
   }).catch(error => {
     errorHandler(error, res)

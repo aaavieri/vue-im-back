@@ -151,6 +151,16 @@ const util = new function () {
   this.splitMessage = ({sessionId, messageType, message}) => (
     this.cutArray(message, env.maxMessageLength).map(item => ({sessionId, messageType, message: item}))
   )
+  this.saveMessage = ({connection, sessionId, message, messageType}) => {
+    const params = []
+    const createTime = new Date()
+    const insertListStatement = '(?, ?, ?, ?)'
+    const messageList = this.splitMessage({sessionId, message, messageType})
+    messageList.forEach(({sessionId, message, messageType}) => params.push(sessionId, message, messageType, createTime))
+    return db.execute(connection, `insert into t_chat_history (session_id, message, messageType, create_time) values 
+        ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params)
+      .then(({results: {insertId = 0}}) => ({historyId: insertId, createTime, connection}))
+  }
 }
 
 module.exports = util

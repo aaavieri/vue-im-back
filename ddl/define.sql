@@ -44,10 +44,11 @@ CREATE TABLE `t_chat_history` (
 
 CREATE TABLE `t_chat_session` (
   `session_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '会话ID',
-  `server_user_id` varchar(10) NOT NULL COMMENT '用户ID',
+  `server_user_id` int(11) NOT NULL COMMENT '用户ID',
   `open_id` varchar(50) NOT NULL COMMENT '客户的OPENID',
   `start_time` datetime NOT NULL COMMENT '开始时间',
   `end_time` datetime NULL COMMENT '结束时间',
+  `rank` tinyint(1) NULL COMMENT '客服评分',
   `del_flag` tinyint(1) NOT NULL DEFAULT '0' COMMENT '删除标志',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',

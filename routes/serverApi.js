@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const util = require('../util/util');
 const db = require('../db/db');
+const axios = require('axios');
 
 router.use(util.tokenChecker)
 /* GET home page. */
