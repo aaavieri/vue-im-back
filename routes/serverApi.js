@@ -35,12 +35,12 @@ router.get('/getClientList', function(req, res, next) {
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session' +
-      ' where user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId])
+      ' where server_user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId])
   }).then(({connection, results, fields}) => {
     const sessionList = util.transferFromList(results, fields)
     const sessionIdList = util.getLatestSession(sessionList).map(item => item.sessionId)
     if (sessionIdList.length > 0) {
-      const searchHistoryStatement = `select history_id, session_id, message, media, type from t_chat_history where session_id in
+      const searchHistoryStatement = `select history_id, session_id, message, message_type, type from t_chat_history where session_id in
         ${util.getListSql({length: sessionIdList.length})} and del_flag = 0`
       return db.execute(connection, searchHistoryStatement, sessionIdList)
     } else {

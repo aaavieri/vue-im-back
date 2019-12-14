@@ -10,6 +10,7 @@ const jwt = require('jwt-simple');
 router.post('/login', (req, res, next) => {
   const {userAccount, password} = req.body
   let outCon = null
+  let data = null
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select server_user_id, server_user_account, channel_id, server_user_pass, server_user_name, settings from t_user' +
@@ -20,12 +21,13 @@ router.post('/login', (req, res, next) => {
       throw new Error('不存在用户或密码错误')
     }
     const {token, expireDate} = util.encodeToken({serverUserId: userInfo.serverUserId, channelId: userInfo.channelId})
-    const data = {userInfo, token}
+    data = {userInfo, token}
     Object.assign(req.session, data)
     res.append('token', token)
-    res.json(util.getSuccessData(data))
     return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
       on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userInfo.serverUserId, token, expireDate, token, expireDate])
+  }).then(() => {
+    res.json(util.getSuccessData(data))
   }).catch(error => {
     error.status = 200
     next(error)

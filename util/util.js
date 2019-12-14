@@ -63,7 +63,7 @@ const util = new function () {
     return arr
   }
   this.adaptKeyExtractor = (keyExtractor) => {
-    if (keyExtractor instanceof String) {
+    if (typeof(keyExtractor) === 'string') {
       return (item) => item[keyExtractor]
     } else {
       return keyExtractor
@@ -151,19 +151,15 @@ const util = new function () {
   this.splitMessage = ({sessionId, messageType, message}) => (
     this.cutArray(message, env.maxMessageLength).map(item => ({sessionId, messageType, message: item}))
   )
-  this.combineMessage = (messageList) => {
-    this.groupToArr(messageList, 'createTime').map(message => (
-      message.dataList.reduce((m1, m2) => {
-        m1.message += m2.message
-        return m1
-      })
-    ))
-  }
-  this.getLatestSession = (sessionList) => {
-    this.groupToArr(sessionList, 'openId').map(session => (
-      session.dataList.reduce((s1) => s1)
-    ))
-  }
+  this.combineMessage = (messageList) => this.groupToArr(messageList, 'createTime').map(message => (
+    message.dataList.reduce((m1, m2) => {
+      m1.message += m2.message
+      return m1
+    })
+  ))
+  this.getLatestSession = (sessionList) => this.groupToArr(sessionList, 'openId').map(session => (
+    session.dataList.reduce((s1) => s1)
+  ))
   this.saveMessage = ({connection, sessionId, message, messageType}) => {
     const params = []
     const createTime = new Date()

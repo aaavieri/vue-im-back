@@ -1,4 +1,5 @@
 {
   "logFileDir": "/var/log",
-  "logFileName": "wwx-im.log"
+  "logFileName": "wwx-im.log",
+  "logLevel": "debug"
 }

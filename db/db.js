@@ -28,6 +28,7 @@ const getTransaction = () => getConnection()
 
 const execute = (connection, statement, params) => new Promise((resolve, reject) => {
   appLog.debug(statement)
+  appLog.debug(params)
   connection.query(statement, params, (error, results, fields) => {
     if (error) {
       appLog.error(error)
