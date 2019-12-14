@@ -2,22 +2,22 @@ var express = require('express');
 var router = express.Router();
 const util = require('../util/util');
 const db = require('../db/db');
-const axios = require('axios');
+const {wechat} = require('../util/socket')
 
 router.use(util.tokenChecker)
 /* GET home page. */
 router.post('/refreshToken', function(req, res, next) {
   let outCon = null
   const {token: oldToken} = req.headers
-  const {userId, channelId} = util.decodeToken(oldToken)
+  const {serverUserId, channelId} = util.decodeToken(oldToken)
   db.getConnection().then(connection => {
     outCon = connection
-    const {token, expireDate} = util.encodeToken({userId, channelId})
+    const {token, expireDate} = util.encodeToken({serverUserId, channelId})
     req.session.token = token
     res.append('token', token)
     res.json(util.getSuccessData({token}))
     return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userId, token, expireDate, token, expireDate])
+      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [serverUserId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
     next(error)
@@ -31,13 +31,14 @@ router.post('/refreshToken', function(req, res, next) {
 router.get('/getClientList', function(req, res, next) {
   let outCon = null
   const {token} = req.headers
-  const {userId} = util.decodeToken(token)
+  const {serverUserId} = util.decodeToken(token)
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session' +
-      ' where user_id = ? and del_flag = 0 order by session_id desc limit 10', [userId])
+      ' where user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId])
   }).then(({connection, results, fields}) => {
-    const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
+    const sessionList = util.transferFromList(results, fields)
+    const sessionIdList = util.getLatestSession(sessionList).map(item => item.sessionId)
     if (sessionIdList.length > 0) {
       const searchHistoryStatement = `select history_id, session_id, message, media, type from t_chat_history where session_id in
         ${util.getListSql({length: sessionIdList.length})} and del_flag = 0`
@@ -46,7 +47,7 @@ router.get('/getClientList', function(req, res, next) {
       return Promise.resolve({connection, results: [], fields: []})
     }
   }).then(({results, fields}) => {
-    const historyList = util.transferFromList(results, fields)
+    const historyList = util.combineMessage(util.transferFromList(results, fields))
     res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
   }).catch(error => {
     error.status = 200
@@ -91,5 +92,24 @@ router.post('/searchHistory', function(req, res, next) {
     }
   })
 });
+
+router.post('/close', function (req, res, next) {
+  let outCon = null
+  const {sessionId} = req.body
+  wechat.closeWwx({sessionId}).then(() => db.getConnection()).then(connection => {
+    outCon = connection
+    return db.execute(connection, 'update t_chat_session set end_time = sysdate(), row_version = row_version + 1 ' +
+      'where session_id = ? and session_id = 0', [sessionId])
+  }).then(() => {
+    res.json(util.getSuccessData({}))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 
 module.exports = router;

@@ -19,7 +19,7 @@ router.post('/login', (req, res, next) => {
     if (userInfo.serverUserPass !== password) {
       throw new Error('不存在用户或密码错误')
     }
-    const {token, expireDate} = util.encodeToken({userId: userInfo.serverUserId, channelId: userInfo.channelId})
+    const {token, expireDate} = util.encodeToken({serverUserId: userInfo.serverUserId, channelId: userInfo.channelId})
     const data = {userInfo, token}
     Object.assign(req.session, data)
     res.append('token', token)

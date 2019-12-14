@@ -101,7 +101,7 @@ const util = new function () {
       })
       return
     }
-    const {userId, expire} = this.decodeToken(token)
+    const {serverUserId, expire} = this.decodeToken(token)
     if (expire < new Date().getTime()) {
       res.json({
         success: false,
@@ -114,8 +114,8 @@ const util = new function () {
     let outCon = null
     db.getConnection().then(connection => {
       outCon = connection
-      return db.execute(connection, `select user_id, token, expire_time from t_user_token where user_id = ? 
-        and token = ? and del_flag = 0 and expire_time > current_time()`, [userId, token])
+      return db.execute(connection, `select server_user_id, token, expire_time from t_user_token where server_user_id = ? 
+        and token = ? and del_flag = 0 and expire_time > sysdate()`, [serverUserId, token])
     }).then(({results, fields}) => {
       const tokenList = util.transferFromList(results, fields)
       if (tokenList.length > 0) {
@@ -151,6 +151,19 @@ const util = new function () {
   this.splitMessage = ({sessionId, messageType, message}) => (
     this.cutArray(message, env.maxMessageLength).map(item => ({sessionId, messageType, message: item}))
   )
+  this.combineMessage = (messageList) => {
+    this.groupToArr(messageList, 'createTime').map(message => (
+      message.dataList.reduce((m1, m2) => {
+        m1.message += m2.message
+        return m1
+      })
+    ))
+  }
+  this.getLatestSession = (sessionList) => {
+    this.groupToArr(sessionList, 'openId').map(session => (
+      session.dataList.reduce((s1) => s1)
+    ))
+  }
   this.saveMessage = ({connection, sessionId, message, messageType}) => {
     const params = []
     const createTime = new Date()

@@ -168,7 +168,8 @@ const socketFunc = new function () {
         messageType,
         message: content
       }, other)
-    }
+    },
+    closeWwx: ({sessionId}) => axios.post(`${env.wwxApiAddress}/sendMsg`, {sessionId})
   }
 }
 
