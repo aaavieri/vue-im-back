@@ -64,18 +64,19 @@ router.post('/connect', function(req, res, next) {
     }
     const randomUserId = util.randomArr(availableUsers).serverUserId
     const randomUser = userList.find(user => user.serverUserId === randomUserId)
+    const startTime = new Date()
     return Promise.all([
-      db.execute(connection, 'insert into t_chat_session (server_user_id, open_id, start_time) values (?, ?, sysdate())', [randomUserId, openID]),
-      Promise.resolve(randomUser),
+      db.execute(connection, 'insert into t_chat_session (server_user_id, open_id, start_time) values (?, ?, ?)', [randomUserId, openID, startTime]),
+      Promise.resolve({randomUser, startTime}),
       db.execute(connection, 'insert into t_client_info (channel_id, open_id, user_name, avatar, phone_num, user_status) values (?, ?, ?, ?, ?, ?)'
         + 'on duplicate key update user_name = ?, avatar = ?, phone_num = ?, user_status = ?, update_time = sysdate(), row_version = row_version + 1',
         [channelID, openID, userName, avatar, phoneNum, userStatus, userName, avatar, phoneNum, userStatus])
     ])
-  }).then(([{results: {insertId: sessionId = 0}}, {serverUserId, serverUserName}]) => {
+  }).then(([{results: {insertId: sessionId = 0}}, {randomUser: {serverUserId, serverUserName}, startTime}]) => {
     if (!sessionId) {
       throw new WechatError({errMsg: '对不起，客服会话建立失败，请稍后重试。', errCode: 103})
     }
-    wechat.connect({serverUserId, openID, userName, avatar, phoneNum})
+    wechat.connect({sessionId, serverUserId, startTime, openID, userName, avatar, phoneNum, userStatus})
     res.json(util.getWechatSuccessData({
       sessionId,
       servicerId: serverUserId,

@@ -166,7 +166,7 @@ const util = new function () {
     const insertListStatement = '(?, ?, ?, ?)'
     const messageList = this.splitMessage({sessionId, message, messageType})
     messageList.forEach(({sessionId, message, messageType}) => params.push(sessionId, message, messageType, createTime))
-    return db.execute(connection, `insert into t_chat_history (session_id, message, messageType, create_time) values 
+    return db.execute(connection, `insert into t_chat_history (session_id, message, message_type, create_time) values 
         ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params)
       .then(({results: {insertId = 0}}) => ({historyId: insertId, createTime, connection}))
   }

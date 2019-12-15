@@ -138,7 +138,7 @@ const socketFunc = new function () {
         });
       }
     },
-    wrapMsg: ({message, messageType, role = 'client', ...other}) => {
+    wrapMsg: ({message, messageType, type = 0, ...other}) => {
       let contentType = 'text'
       switch (messageType) {
         case 2:
@@ -151,7 +151,7 @@ const socketFunc = new function () {
       return Object.assign({
         contentType,
         content: message,
-        role
+        role: type === 0 ? 'client' : 'server'
       }, other)
     },
     unWrapMsg: ({content, contentType, ...other}) => {

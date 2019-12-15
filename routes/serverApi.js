@@ -32,23 +32,49 @@ router.get('/getClientList', function(req, res, next) {
   let outCon = null
   const {token} = req.headers
   const {serverUserId} = util.decodeToken(token)
+  const sessionList = []
+  const historyList = []
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session' +
       ' where server_user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId])
   }).then(({connection, results, fields}) => {
-    const sessionList = util.transferFromList(results, fields)
-    const sessionIdList = util.getLatestSession(sessionList).map(item => item.sessionId)
-    if (sessionIdList.length > 0) {
-      const searchHistoryStatement = `select history_id, session_id, message, message_type, type from t_chat_history where session_id in
-        ${util.getListSql({length: sessionIdList.length})} and del_flag = 0`
-      return db.execute(connection, searchHistoryStatement, sessionIdList)
+    util.getLatestSession(util.transferFromList(results, fields)).forEach(session => sessionList.push(session))
+    if (sessionList.length > 0) {
+      const searchHistoryStatement = `select history_id, session_id, message, message_type, type, create_time from t_chat_history where session_id in
+        ${util.getListSql({length: sessionList.length})} and del_flag = 0`
+      return db.execute(connection, searchHistoryStatement, sessionList.map(item => item.sessionId))
+    } else {
+      return Promise.resolve({connection, results: [], fields: []})
+    }
+  }).then(({connection, results, fields}) => {
+    historyList.push(...util.combineMessage(util.transferFromList(results, fields)))
+    // res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
+    if (sessionList.length > 0) {
+      return db.execute(connection, `select open_id, user_name, avatar, phone_num, user_status from t_client_info where open_id in
+        ${util.getListSql({length: sessionList.length})} and del_flag = 0`, sessionList.map(session => session.openId))
     } else {
       return Promise.resolve({connection, results: [], fields: []})
     }
   }).then(({results, fields}) => {
-    const historyList = util.combineMessage(util.transferFromList(results, fields))
-    res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
+    const clientList = util.transferFromList(results, fields)
+    const data = sessionList.map(session => {
+      const client = clientList.find(client => client.openId === session.openId)
+      return {
+        clientChatEn: {
+          clientChatId: client.openId,
+          clientChatName: client.userName,
+          avatar: client.avatar,
+          phoneNum: client.phoneNum,
+          userStatus: client.userStatus
+        },
+        sessionId: session.sessionId,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        msgList: historyList.filter(history => history.sessionId === session.sessionId).map(wechat.wrapMsg)
+      }
+    })
+    res.json(util.getSuccessData(data))
   }).catch(error => {
     error.status = 200
     next(error)
