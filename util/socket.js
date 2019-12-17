@@ -77,14 +77,18 @@ server.listen(3001);
 
 const socketFunc = new function () {
   this.wechat = {
-    connect: ({serverUserId, openID, userName, ...data}) => {
+    connect: ({serverUserId, openID, userName, avatar, phoneNum, userStatus, ...data}) => {
       if (serverChatDic.has(serverUserId)) {
         serverChatDic.get(serverUserId).socket.emit('CLIENT_ON', {
           clientChatEn: {
             clientChatId: openID,
-            clientChatName: userName
+            clientChatName: userName,
+            avatar,
+            phoneNum,
+            userStatus
           },
-          data
+          serverUserId,
+          ...data
         });
       }
     },
