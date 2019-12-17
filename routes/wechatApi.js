@@ -98,7 +98,7 @@ router.post('/sendMsg', function (req, res, next) {
     return res.json(new WechatError({errMsg: '对不起，消息内容不合法。', errCode: 201}))
   }
   let session = null
-  db.getConnection().then(connection => {
+  db.getTransaction().then(connection => {
     return db.execute(connection, 'select server_user_id, open_id from t_chat_session where session_id = ? and del_flag = 0' +
       ' and end_time is null', [sessionId])
   }).then(({connection, results, fields}) => {
@@ -107,16 +107,20 @@ router.post('/sendMsg', function (req, res, next) {
       throw new WechatError({errMsg: '对不起，会话不存在或者已过期', errCode: 202})
     }
     session = sessionList[0]
-    return util.saveMessage({connection, message, messageType, sessionId})
+    return util.saveMessage({connection, message, messageType, sessionId, type: 0})
   }).then(({createTime, historyId}) => {
-    wechat.sendMsg({serverUserId: session.serverUserId, openID: session.openId, msg: wechat.wrapMsg({messageType, message, createTime, historyId})})
+    wechat.sendMsg({serverUserId: session.serverUserId, openID: session.openId, msg: wechat.wrapMsg({sessionId, messageType, message, createTime, historyId})})
+    outCon.commit({}, () => {
+      outCon.release()
+    })
     res.json(util.getWechatSuccessData({}))
   }).catch(error => {
-    errorHandler(error, res)
-  }).finally(() => {
     if (outCon) {
-      outCon.release()
+      outCon.rollback({}, () => {
+        outCon.release()
+      })
     }
+    errorHandler(error, res)
   })
 })
 

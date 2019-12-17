@@ -6,7 +6,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var bodyParser = require("body-parser");
 var bodyPaserXml = require("body-parser-xml");
-var appLogger = require('./logger/appLogger')
+var appLogger = require('./logger/appLogger');
 bodyPaserXml(bodyParser)
 
 var wechatApiRouter = require('./routes/wechatApi');

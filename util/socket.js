@@ -2,6 +2,7 @@ const env = require('../config/env')
 const util = require('../util/util')
 const db = require('../db/db')
 const axios = require('axios')
+const appLogger = require('../logger/appLogger')
 // socket
 var server = require('http').createServer();
 var io = require('socket.io')(server);
@@ -30,7 +31,7 @@ io.on('connection', function(socket) {
     if (clientChatDic.has(data.clientChatId)) {
       clientChatDic.get(data.clientChatId).socket.emit('SERVER_SEND_MSG', { msg: data.msg });
     } else {
-      socketFunc.wechat.sendToWechat({openID: data.clientChatId, serverUserId: data.serverChatId, ...data.msg})
+      socketFunc.wechat.sendToWechat({openID: data.clientChatId, serverUserId: data.serverChatId, sessionId: data.sessionId, ...data.msg})
     }
   });
 
@@ -107,12 +108,17 @@ const socketFunc = new function () {
         }).then(({data: {errCode, errMsg}}) => {
           if (errCode === 0) {
             let outCon = null
-            db.getConnection().then(connection => {
+            db.getTransaction().then(connection => {
               outCon = connection
-              return util.saveMessage({connection, message, messageType, sessionId})
+              return util.saveMessage({connection, message, messageType, sessionId, type: 1})
             }).then(({createTime, historyId}) => {
-              this.wechat.sendMsg({serverUserId, openID, msg: {contentType, content, createTime, historyId, role: 'server'}})
+              this.wechat.sendMsg({serverUserId, openID, msg: {contentType, sessionId, content, createTime, historyId, role: 'server'}})
+              outCon.commit()
             }).catch(error => {
+              appLogger.error(error)
+              if (outCon) {
+                outCon.rollback()
+              }
               this.wechat.sendError(serverUserId, openID, error.errMsg)
             }).finally(() => {
               if (outCon) {
@@ -120,9 +126,11 @@ const socketFunc = new function () {
               }
             })
           } else {
+            appLogger.error(errMsg)
             this.wechat.sendError(serverUserId, openID, errMsg)
           }
         }).catch(error => {
+          appLogger.error(error)
           this.wechat.sendError(serverUserId, openID, error.errMsg)
         })
       }

@@ -5,6 +5,25 @@ const db = require('../db/db');
 const {wechat} = require('../util/socket')
 
 router.use(util.tokenChecker)
+
+router.get('/getUserInfoByToken', function (req, res, next) {
+  let outCon = null
+  const {token} = req.headers
+  const {serverUserId} = util.decodeToken(token)
+  db.getConnection().then(connection => {
+    outCon = connection
+    return db.execute(connection, 'select server_user_id, server_user_name from t_user where server_user_id = ? and del_flag = 0', [serverUserId])
+  }).then(({results, fields}) => {
+    res.json(util.getSuccessData(util.transferFromList(results, fields)))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 /* GET home page. */
 router.post('/refreshToken', function(req, res, next) {
   let outCon = null
@@ -50,23 +69,25 @@ router.get('/getClientList', function(req, res, next) {
   }).then(({connection, results, fields}) => {
     historyList.push(...util.combineMessage(util.transferFromList(results, fields)))
     // res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
+    let promiseArray = []
     if (sessionList.length > 0) {
-      return db.execute(connection, `select open_id, user_name, avatar, phone_num, user_status from t_client_info where open_id in
-        ${util.getListSql({length: sessionList.length})} and del_flag = 0`, sessionList.map(session => session.openId))
+      promiseArray.push(db.execute(connection, `select open_id, user_name, avatar, phone_num, user_status from t_client_info where open_id in
+        ${util.getListSql({length: sessionList.length})} and del_flag = 0`, sessionList.map(session => session.openId)),
+        db.execute(connection, 'select server_user_id, server_user_name from t_user where server_user_id = ? and del_flag = 0', [serverUserId]))
     } else {
-      return Promise.resolve({connection, results: [], fields: []})
+      promiseArray.push(Promise.resolve({connection, results: [], fields: []}), Promise.resolve({connection, results: [], fields: []}))
     }
-  }).then(({results, fields}) => {
+    return Promise.all(promiseArray)
+  }).then(([{results, fields}, {results: serverResults, fields: serverFields}]) => {
     const clientList = util.transferFromList(results, fields)
+    const [server] = util.transferFromList(serverResults, serverFields)
     const data = sessionList.map(session => {
       const client = clientList.find(client => client.openId === session.openId)
       return {
         clientChatEn: {
           clientChatId: client.openId,
           clientChatName: client.userName,
-          avatar: client.avatar,
-          phoneNum: client.phoneNum,
-          userStatus: client.userStatus
+          ...client
         },
         sessionId: session.sessionId,
         startTime: session.startTime,
@@ -74,7 +95,7 @@ router.get('/getClientList', function(req, res, next) {
         msgList: historyList.filter(history => history.sessionId === session.sessionId).map(wechat.wrapMsg)
       }
     })
-    res.json(util.getSuccessData(data))
+    res.json(util.getSuccessData({sessionList: data, server}))
   }).catch(error => {
     error.status = 200
     next(error)
@@ -84,6 +105,60 @@ router.get('/getClientList', function(req, res, next) {
     }
   })
 });
+
+router.post('/moreMsg', function (req, res, next) {
+  const {openId, sessionId} = req.body
+  let outCon = null
+  db.getConnection().then(connection => {
+    outCon = connection
+    return db.execute(connection, 'select session_id, server_user_id from t_chat_session where open_id = ? and session_id < ? and message_count > 0 and del_flag = 0' +
+      ' order by session_id desc limit 1', [openId, sessionId])
+  }).then(({connection, results, fields}) => {
+    const [session = {}] = util.transferFromList(results, fields)
+    if (!session.sessionId) {
+      throw new Error('没有更多记录了')
+    }
+    return Promise.all([db.execute(connection, 'select history_id, session_id, message, message_type, type, create_time' +
+      ' from t_chat_history where session_id = ? and del_flag = 0', [session.sessionId]),
+      db.execute(connection, 'select open_id, user_name, avatar, phone_num, user_status from t_client_info where open_id = ? and del_flag = 0', [openId]),
+      db.execute(connection, 'select server_user_id, server_user_name from t_user where server_user_id = ? and del_flag = 0', [session.serverUserId]),
+      Promise.resolve(session)
+    ])
+  }).then(([{results: historyList, fields: historyFields}, {results: clientList, fields: clientFields}, {results: serverList, fields: serverFields}, session]) => {
+    if (historyList.length === 0) {
+      throw new Error('没有更多记录了')
+    }
+    if (clientList.length === 0) {
+      throw new Error('客户不存在或已被清空')
+    }
+    if (serverList.length === 0) {
+      throw new Error('之前服务的客服不存在或已被清空')
+    }
+    const histories = util.transferFromList(historyList, historyFields)
+    const [client] = util.transferFromList(clientList, clientFields)
+    const [server] = util.transferFromList(serverList, serverFields)
+    const data = {
+      clientChatEn: {
+        clientChatId: client.openId,
+        clientChatName: client.userName,
+        ...client
+      },
+      ...server,
+      sessionId: session.sessionId,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      msgList: histories.filter(history => history.sessionId === session.sessionId).map(wechat.wrapMsg)
+    }
+    res.json(util.getSuccessData(data))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 
 router.post('/searchHistory', function(req, res, next) {
   const {token} = req.headers

@@ -148,8 +148,8 @@ const util = new function () {
     }
     return newArr;
   }
-  this.splitMessage = ({sessionId, messageType, message}) => (
-    this.cutArray(message, env.maxMessageLength).map(item => ({sessionId, messageType, message: item}))
+  this.splitMessage = ({message, ...other}) => (
+    this.cutArray(message, env.maxMessageLength).map(item => ({...other, message: item}))
   )
   this.combineMessage = (messageList) => this.groupToArr(messageList, 'createTime').map(message => (
     message.dataList.reduce((m1, m2) => {
@@ -160,15 +160,17 @@ const util = new function () {
   this.getLatestSession = (sessionList) => this.groupToArr(sessionList, 'openId').map(session => (
     session.dataList.reduce((s1) => s1)
   ))
-  this.saveMessage = ({connection, sessionId, message, messageType}) => {
+  this.saveMessage = ({connection, ...data}) => {
     const params = []
     const createTime = new Date()
-    const insertListStatement = '(?, ?, ?, ?)'
-    const messageList = this.splitMessage({sessionId, message, messageType})
-    messageList.forEach(({sessionId, message, messageType}) => params.push(sessionId, message, messageType, createTime))
-    return db.execute(connection, `insert into t_chat_history (session_id, message, message_type, create_time) values 
-        ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params)
-      .then(({results: {insertId = 0}}) => ({historyId: insertId, createTime, connection}))
+    const insertListStatement = '(?, ?, ?, ?, ?)'
+    const messageList = this.splitMessage(data)
+    messageList.forEach(({sessionId, message, messageType, type}) => params.push(sessionId, message, messageType, type, createTime))
+    return Promise.all([db.execute(connection, `insert into t_chat_history (session_id, message, message_type, type, create_time) values 
+        ${util.getListSql({length: messageList.length, fillStr: insertListStatement, open: '', close: ''})}`, params),
+      db.execute(connection, 'update t_chat_session set message_count = message_count + 1, row_version = row_version + 1' +
+        ' where session_id = ? and del_flag = 0', [data.sessionId])
+    ]).then(([{results: {insertId = 0}}]) => ({historyId: insertId, createTime, connection}))
   }
 }
 
