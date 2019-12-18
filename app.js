@@ -26,6 +26,10 @@ Promise.prototype.finally = function (callback) {
   );
 };
 
+Array.prototype.distinct = function () {
+  return Array.from(new Set(this))
+}
+
 app.use(bodyParser.xml({
   limit: "1MB",   // Reject payload bigger than 1 MB
   xmlParseOptions: {

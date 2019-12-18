@@ -21,6 +21,7 @@ router.post('/login', (req, res, next) => {
       throw new Error('不存在用户或密码错误')
     }
     const {token, expireDate} = util.encodeToken({serverUserId: userInfo.serverUserId, channelId: userInfo.channelId})
+    delete userInfo.serverUserPass
     data = {userInfo, token}
     Object.assign(req.session, data)
     res.append('token', token)

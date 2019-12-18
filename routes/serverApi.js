@@ -3,6 +3,8 @@ var router = express.Router();
 const util = require('../util/util');
 const db = require('../db/db');
 const {wechat} = require('../util/socket')
+const xlsx = require('node-xlsx')
+const urlencode = require('urlencode');
 
 router.use(util.tokenChecker)
 
@@ -73,7 +75,7 @@ router.get('/getClientList', function(req, res, next) {
     if (sessionList.length > 0) {
       promiseArray.push(db.execute(connection, `select open_id, user_name, avatar, phone_num, user_status from t_client_info where open_id in
         ${util.getListSql({length: sessionList.length})} and del_flag = 0`, sessionList.map(session => session.openId)),
-        db.execute(connection, 'select server_user_id, server_user_name from t_user where server_user_id = ? and del_flag = 0', [serverUserId]))
+        db.execute(connection, 'select server_user_id, server_user_name, channel_id from t_user where server_user_id = ? and del_flag = 0', [serverUserId]))
     } else {
       promiseArray.push(Promise.resolve({connection, results: [], fields: []}), Promise.resolve({connection, results: [], fields: []}))
     }
@@ -162,28 +164,45 @@ router.post('/moreMsg', function (req, res, next) {
 
 router.post('/searchHistory', function(req, res, next) {
   const {token} = req.headers
-  const {userId} = util.decodeToken(token)
-  const {openId = null, keyWord} = req.body
-  if (!keyWord) {
+  const {serverUserId} = util.decodeToken(token)
+  const {openId = '0', keyword} = req.body
+  if (!keyword) {
+    res.json(util.getFailureData('搜索的关键字为空'))
+    return
+  }
+  const keywords = keyword.split(' ')
+  if (0 === keywords.length) {
     res.json(util.getFailureData('搜索的关键字为空'))
     return
   }
   let outCon = null
+  const sessionList = []
   db.getConnection().then(connection => {
     outCon = connection
-    const statement = `select history_id, session_id, message, media, type from t_chat_history where server_user_id = ? and
-      ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
-    const params = openId ? [userId, openId] : [userId]
-    return db.execute(connection, statement, [...params, `%${keyWord}%`])
+    const statement = `select session_id, open_id from t_chat_session where server_user_id = ? and
+      ${openId !== '0' ? 'open_id = ? and' : ''} del_flag = 0`
+    const params = openId !== '0' ? [serverUserId, openId] : [serverUserId]
+    return db.execute(connection, statement, params)
   }).then(({connection, results, fields}) => {
-    const sessionIdList = util.transferFromList(results, fields).map(item => item.sessionId)
-    const statement = `select history_id, session_id, message, media, type from t_chat_history where session_id in 
-      ${util.getListSql({length: sessionIdList.length})} and ${openId ? 'open_id = ? and' : ''} message like ? and del_flag = 0`
-    const params = openId ? [...sessionIdList, openId] : sessionIdList
-    return db.execute(connection, statement, [...params, `%${keyWord}%`])
-  }).then(({results, fields}) => {
-    const historyList = util.transferFromList(results, fields)
-    res.json(util.getSuccessData(util.groupToArr(historyList, 'sessionId', 'historyList')))
+    sessionList.push(...util.transferFromList(results, fields))
+    if (sessionList.length === 0) {
+      return Promise.all([{connection, results: [], fields: []}, {connection, results: [], fields: []}])
+    }
+    return Promise.all([
+      db.execute(connection, `select history_id, session_id, message, message_type, type from t_chat_history where session_id in ${util.getListSql({length: sessionList.length})} 
+        and message_type = 1 and ${util.getListSql({length: keywords.length, fillStr: 'message like ?', separator: ' or '})} 
+        and del_flag = 0`,
+        [...sessionList.map(session => session.sessionId), ...keywords.map(word => `%${word}%`)]),
+      db.execute(connection, `select open_id, user_name, phone_num from t_client_info where open_id in ${util.getListSql({length: sessionList.length})} and del_flag = 0`,
+        sessionList.map(session => session.openId))
+    ])
+  }).then(([{results: historyResults, fields: historyFields}, {results: clientResults, fields: clientFields}]) => {
+    const historyList = util.transferFromList(historyResults, historyFields)
+    const clientMap = util.groupToObj(util.transferFromList(clientResults, clientFields), 'openId')
+    const sessionMap = util.groupToObj(sessionList, session => session.sessionId.toString())
+    res.json(util.getSuccessData(historyList.map(history => (
+      {history, client: clientMap[sessionMap[history.sessionId.toString()].openId]}
+    ))))
   }).catch(error => {
     error.status = 200
     next(error)
@@ -203,6 +222,64 @@ router.post('/close', function (req, res, next) {
       'where session_id = ? and session_id = 0', [sessionId])
   }).then(() => {
     res.json(util.getSuccessData({}))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
+
+router.get('/download/:type/:channelId/:openId', function (req, res, next) {
+  let outCon = null
+  const {openId, channelId, type} = req.params
+  const {token} = req.headers
+  const {serverUserId} = util.decodeToken(token)
+  db.getConnection().then(connection => {
+    outCon = connection
+    // 0：当前客服与客户的会话，1：所有客服与客户的会话
+    const params = [openId]
+    let statement = 'select session_id, server_user_id from t_chat_session where open_id = ? '
+    if (type === 1) {
+      statement += ' and server_user_id = ? '
+      params.push(serverUserId)
+    }
+    statement += ' and del_flag = 0'
+    return db.execute(connection, statement, params)
+  }).then(({connection, results, fields}) => {
+    const sessionList = util.transferFromList(results, fields)
+    const sessionIdList = sessionList.map(session => session.sessionId)
+    const serverUserIdList = sessionList.map(session => session.serverUserId).distinct()
+    return Promise.all([
+      db.execute(connection, `select session_id, message, message_type, type, create_time from t_chat_history where session_id in
+        ${util.getListSql({length: sessionIdList.length})} and del_flag = 0`, sessionIdList),
+      db.execute(connection, `select server_user_id, server_user_name from t_user where channel_id = ? and server_user_id in
+        ${util.getListSql({length: serverUserIdList.length})} and del_flag = 0`, [channelId, ...serverUserIdList]),
+      db.execute(connection, 'select user_name from t_client_info where channel_id = ? and open_id = ? and del_flag = 0', [channelId, openId]),
+      Promise.resolve(sessionList)
+    ])
+  }).then(([{results: historyResults, fields: historyFields}, {results: userResults, fields: userFields}, {results: clientResults, fields: clientFields}, sessionList]) => {
+    const historyList = util.combineMessage(util.transferFromList(historyResults, historyFields))
+    const userMap = util.groupToObj(util.transferFromList(userResults, userFields), user => user.serverUserId.toString())
+    const sessionMap = util.groupToObj(sessionList, session => session.sessionId.toString())
+    const [clientInfo] = util.transferFromList(clientResults, clientFields)
+    const data = [['时间', '发送者', '内容'], ...historyList.map(history => {
+      const session = sessionMap[history.sessionId.toString()][0]
+      const user = userMap[session.serverUserId.toString()][0]
+      const sendName = history.type === 0 ? clientInfo.userName : user.serverUserName
+      const content = history.messageType === 3 ? '语音' : history.message
+      return [util.dateFormat(history.createTime, 'yyyy年MM月dd日hh:mm:ss'), sendName, content]
+    })]
+    const options = {'!cols': [{ wch: 25 }, { wch: 10 }, { wch: 255 }]}
+    const buffer = xlsx.build([{name: "sheet1", data}], options)
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8',
+      filename: urlencode(`${clientInfo.userName}.xlsx`),
+      'Content-Length': buffer.length
+    });
+    res.status(200).send(buffer);
   }).catch(error => {
     error.status = 200
     next(error)
