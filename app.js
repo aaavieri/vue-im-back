@@ -30,6 +30,31 @@ Array.prototype.distinct = function () {
   return Array.from(new Set(this))
 }
 
+Array.prototype.flat = function () {
+  const result = []
+  this.forEach(item => {
+    if (item instanceof Array) {
+      result.push(...item)
+    } else {
+      result.push(item)
+    }
+  })
+  return result
+}
+
+Array.prototype.flatMap = function (mapFunction) {
+  const result = []
+  this.forEach(item => {
+    if (item instanceof Array) {
+      result.push(...item)
+    } else {
+      result.push(item)
+    }
+  })
+  return result.map(mapFunction)
+}
+
+
 app.use(bodyParser.xml({
   limit: "1MB",   // Reject payload bigger than 1 MB
   xmlParseOptions: {

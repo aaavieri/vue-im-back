@@ -190,6 +190,38 @@ const util = new function () {
         ' where session_id = ? and del_flag = 0', [data.sessionId])
     ]).then(([{results: {insertId = 0}}]) => ({historyId: insertId, createTime, connection}))
   }
+  this.splitByWords = (str, delimiters) => {
+    let arr = [{
+      isDelimiter: false,
+      content: str
+    }]
+    delimiters.forEach(delimiter => {
+      arr = arr.map(item => this.splitByWord(item.content, delimiter)).flat()
+    })
+    return arr
+  }
+  this.splitByWord = (str, delimiter) => {
+    const arr = []
+    let temp = str
+    let i = temp.indexOf(delimiter)
+    while (i >= 0) {
+      arr.push({
+        isDelimiter: false,
+        content: temp.substring(0, i)
+      })
+      arr.push({
+        isDelimiter: true,
+        content: delimiter
+      })
+      temp = temp.substring(i + delimiter.length)
+      i = temp.indexOf(delimiter)
+    }
+    arr.push({
+      isDelimiter: false,
+      content: temp
+    })
+    return arr.filter(item => item.content.length > 0)
+  }
 }
 
 module.exports = util

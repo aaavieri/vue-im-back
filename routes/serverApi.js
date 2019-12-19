@@ -189,7 +189,7 @@ router.post('/searchHistory', function(req, res, next) {
       return Promise.all([{connection, results: [], fields: []}, {connection, results: [], fields: []}])
     }
     return Promise.all([
-      db.execute(connection, `select history_id, session_id, message, message_type, type from t_chat_history where session_id in ${util.getListSql({length: sessionList.length})} 
+      db.execute(connection, `select history_id, session_id, message, message_type, type, create_time from t_chat_history where session_id in ${util.getListSql({length: sessionList.length})} 
         and message_type = 1 and ${util.getListSql({length: keywords.length, fillStr: 'message like ?', separator: ' or '})} 
         and del_flag = 0`,
         [...sessionList.map(session => session.sessionId), ...keywords.map(word => `%${word}%`)]),
@@ -198,11 +198,17 @@ router.post('/searchHistory', function(req, res, next) {
     ])
   }).then(([{results: historyResults, fields: historyFields}, {results: clientResults, fields: clientFields}]) => {
     const historyList = util.transferFromList(historyResults, historyFields)
+    historyList.forEach(history => {
+      history.displayTime = util.dateFormat(history.createTime, 'yyyy/MM/dd hh:mm:ss')
+      history.messageList = util.splitByWords(history.message, keywords)
+    })
     const clientMap = util.groupToObj(util.transferFromList(clientResults, clientFields), 'openId')
     const sessionMap = util.groupToObj(sessionList, session => session.sessionId.toString())
-    res.json(util.getSuccessData(historyList.map(history => (
-      {history, client: clientMap[sessionMap[history.sessionId.toString()].openId]}
-    ))))
+    res.json(util.getSuccessData(historyList.map(history => {
+      const [session] = sessionMap[history.sessionId.toString()]
+      const [client] = clientMap[session.openId]
+      return {history, client}
+    })))
   }).catch(error => {
     error.status = 200
     next(error)
@@ -219,7 +225,7 @@ router.post('/close', function (req, res, next) {
   wechat.closeWwx({sessionId}).then(() => db.getConnection()).then(connection => {
     outCon = connection
     return db.execute(connection, 'update t_chat_session set end_time = sysdate(), row_version = row_version + 1 ' +
-      'where session_id = ? and session_id = 0', [sessionId])
+      'where session_id = ? and del_flag = 0', [sessionId])
   }).then(() => {
     res.json(util.getSuccessData({}))
   }).catch(error => {
@@ -280,6 +286,32 @@ router.get('/download/:type/:channelId/:openId', function (req, res, next) {
       'Content-Length': buffer.length
     });
     res.status(200).send(buffer);
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
+
+router.get('/getSession/:sessionId', function (req, res, next) {
+  let outCon = null
+  const {sessionId} = req.params
+  db.getConnection().then(connection => {
+    outCon = connection
+    return Promise.all([
+      db.execute(connection, 'select history_id, session_id, message, message_type, type, create_time from t_chat_history ' +
+        'where session_id = ? and del_flag = 0', [sessionId]),
+      db.execute(connection, 'select session_id, start_time, end_time from t_chat_session where session_id = ? and del_flag = 0',
+        [sessionId])
+    ])
+  }).then(([{results: historyResults, fields: historyFields}, {results: sessionResults, fields: sessionFields}]) => {
+    const historyList = util.transferFromList(historyResults, historyFields)
+    const [session] = util.transferFromList(sessionResults, sessionFields)
+    session.msgList = util.combineMessage(historyList).map(wechat.wrapMsg)
+    res.json(util.getSuccessData(session))
   }).catch(error => {
     error.status = 200
     next(error)

@@ -151,14 +151,23 @@ router.post('/appraise', function (req, res, next) {
   }
   let outCon = null
   db.getConnection().then(connection => {
-      outCon = connection
-      return db.execute(connection, 'update t_chat_session set rank = ? where session_id = ? and del_flag = 0', [rank, sessionId])
-    }
-  ).then(({results: {changedRows = 0}}) => {
-    if (!changedRows) {
+    outCon = connection
+    return db.execute(connection, 'select end_time, rank from t_chat_session where session_id = ? and del_flag = 0')
+  }).then(({connection, results, fields}) => {
+    const sessionList = util.transferFromList(results, fields)
+    if (sessionList.length === 0) {
       throw new WechatError({errMsg: '找不到评分的客服会话', errCode: 602})
     }
-    res.json(util.getWechatSuccessData({}))
+    const [{endTime, rank: originalRank}] = sessionList
+    if (endTime) {
+      throw new WechatError({errMsg: '该会话尚未结束，暂时不能进行评价', errCode: 603})
+    }
+    if (originalRank) {
+      throw new WechatError({errMsg: '您已评价过该会话，不能重复评价', errCode: 604})
+    }
+    return db.execute(connection, 'update t_chat_session set rank = ? where session_id = ? and del_flag = 0', [rank, sessionId])
+  }).then(({results: {changedRows = 0}}) => {
+    res.json(util.getWechatSuccessData({changedRows}))
   }).catch(error => {
     errorHandler(error, res)
   }).finally(() => {
