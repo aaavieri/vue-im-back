@@ -1,12 +1,41 @@
 var express = require('express');
 var router = express.Router();
 const util = require('../util/util');
+const env = require('../config/env')
 const db = require('../db/db');
-const {wechat} = require('../util/socket')
+const {wechat, server: {refreshToken: refreshHandler}} = require('../util/socket')
 const xlsx = require('node-xlsx')
 const urlencode = require('urlencode');
+const multer  = require('multer');
 
-router.use(util.tokenChecker)
+const storage = multer.diskStorage({
+  destination: function destination(req, file, cb) {
+    // 文件上传成功后会放入public下的upload文件夹
+    cb(null, env.fileSavePath);
+  },
+  filename: function filename(req, file, cb) {
+    // 设置文件的名字为其原本的名字，也可以添加其他字符，来区别相同文件，例如file.originalname+new Date().getTime();利用时间来区分
+    file.saveName = new Date().getTime() + '.' + file.originalname;
+    cb(null, file.saveName);
+  }
+});
+
+const upload = multer({
+  storage: storage
+});
+
+router.use((req, res, next) => {
+  const {token} = req.headers
+  util.tokenChecker({
+    data: {serverChatToken: token},
+    nextHandler: () => next(),
+    refreshHandler,
+    errorHandler: ({error}) => {
+      error.status = 200
+      next(error)
+    }
+  })
+})
 
 router.get('/getUserInfoByToken', function (req, res, next) {
   let outCon = null
@@ -38,7 +67,7 @@ router.post('/refreshToken', function(req, res, next) {
     res.append('token', token)
     res.json(util.getSuccessData({token}))
     return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [serverUserId, token, expireDate, token, expireDate])
+      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), del_flag = 0, row_version = row_version + 1 `, [serverUserId, token, expireDate, token, expireDate])
   }).catch(error => {
     error.status = 200
     next(error)
@@ -49,7 +78,7 @@ router.post('/refreshToken', function(req, res, next) {
   })
 });
 
-router.get('/getClientList', function(req, res, next) {
+router.get('/getInitData', function(req, res, next) {
   let outCon = null
   const {token} = req.headers
   const {serverUserId} = util.decodeToken(token)
@@ -321,5 +350,33 @@ router.get('/getSession/:sessionId', function (req, res, next) {
     }
   })
 })
+
+router.post('/upload', upload.single('uploadFile'), function(req, res) {
+
+    // save file
+  // <input type="file" name="uploadFile" />
+  // let file = req.files.uploadFile;
+  let file = req.file;
+  console.log(file)
+  res.json(util.getSuccessData(`${env.fileAccessPath}/${file.filename}`));
+  // let encodeFileName = Number.parseInt(Date.now() + Math.random()) + file.name;
+  // file.mv(`${env.fileSavePath}/${encodeFileName}`, function(err) {
+  //   if (err) {
+  //     return res.status(500).send({
+  //       code: err.code,
+  //       data: err,
+  //       message: '文件上传失败'
+  //     });
+  //   }
+  //   res.send({
+  //     code: 0,
+  //     data: {
+  //       fileName: file.name,
+  //       fileUrl: `./crm/file/${encodeFileName}`
+  //     },
+  //     message: '文件上传成功'
+  //   });
+  // });
+});
 
 module.exports = router;

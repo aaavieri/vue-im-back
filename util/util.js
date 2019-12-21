@@ -1,6 +1,7 @@
 const db = require('../db/db');
 const jwt = require('jwt-simple');
 const env = require('../config/env');
+const {WechatError} = require('./error')
 
 const util = new function () {
   this.dateFormat = (date, fmt) => {
@@ -108,51 +109,110 @@ const util = new function () {
     return {token, expireDate}
   }
   this.decodeToken = (token) => jwt.decode(token, env.tokenKey)
-  this.tokenChecker = (req, res, next) => {
-    const {token} = req.headers
-    if (!token) {
-      res.json({
-        success: false,
-        data: null,
-        loginError: true,
-        errMsg: '缺少token，请重新登录'
-      })
-      return
-    }
-    const {serverUserId, expire} = this.decodeToken(token)
-    if (expire < new Date().getTime()) {
-      res.json({
-        success: false,
-        data: null,
-        loginError: true,
-        errMsg: 'token已过期，请重新登录'
-      })
-      return
-    }
-    let outCon = null
-    db.getConnection().then(connection => {
-      outCon = connection
-      return db.execute(connection, `select server_user_id, token, expire_time from t_user_token where server_user_id = ? 
-        and token = ? and del_flag = 0 and expire_time > sysdate()`, [serverUserId, token])
-    }).then(({results, fields}) => {
-      const tokenList = util.transferFromList(results, fields)
-      if (tokenList.length > 0) {
-        next()
-      } else {
-        res.json({
-          success: false,
-          data: null,
-          loginError: true,
-          errMsg: '无法识别token，请重新登录'
-        })
+  // this.tokenChecker4Http = (req, res, next) => {
+  //   const {token} = req.headers
+  //   if (!token) {
+  //     res.json({
+  //       success: false,
+  //       data: null,
+  //       loginError: true,
+  //       errMsg: '缺少token，请重新登录'
+  //     })
+  //     return
+  //   }
+  //   const {serverUserId, expire, channelId} = this.decodeToken(token)
+  //   const now = new Date().getTime()
+  //   if (expire < now) {
+  //     res.json({
+  //       success: false,
+  //       data: null,
+  //       loginError: true,
+  //       errMsg: 'token已过期，请重新登录'
+  //     })
+  //     return
+  //   }
+  //   const needRefreshToken = now + env.tokenRefreshPeriod * 1000 >= expire
+  //   let refreshedToken = null
+  //   let outCon = null
+  //   db.getConnection().then(connection => {
+  //     outCon = connection
+  //     return db.execute(connection, `select server_user_id, token, expire_time from t_user_token where server_user_id = ?
+  //       and token = ? and del_flag = 0 and expire_time > sysdate()`, [serverUserId, token])
+  //   }).then(({connection, results, fields}) => {
+  //     const tokenList = util.transferFromList(results, fields)
+  //     if (tokenList.length === 0) {
+  //       throw new Error('无法识别token，请重新登录')
+  //     }
+  //     if (needRefreshToken) {
+  //       const {token: newToken, expireDate} = util.encodeToken({serverUserId, channelId})
+  //       refreshedToken = newToken
+  //       return db.execute(connection, 'update t_user_token set token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 ',
+  //         [newToken, expireDate])
+  //     } else {
+  //       return Promise.resolve({})
+  //     }
+  //   }).then(() => {
+  //     if (needRefreshToken) {
+  //       server.refreshToken({serverChatId: serverUserId, token: refreshedToken})
+  //     }
+  //     next()
+  //   }).catch(error => {
+  //     error.status = 200
+  //     next(error)
+  //   }).finally(() => {
+  //     if (outCon) {
+  //       outCon.release()
+  //     }
+  //   })
+  // }
+  this.tokenChecker = ({data: {serverChatToken: token},
+                                nextHandler = () => {},
+                                refreshHandler = () => {},
+                                errorHandler = () => {}
+                              }) => {
+    let {serverUserId = 0, expire, channelId} = this.decodeToken(token)
+    return new Promise(((resolve, reject) => {
+      if (!token) {
+        reject(new WechatError({errCode: 1001, errMsg: '缺少token，请重新登录'}))
       }
-    }).catch(error => {
-      error.status = 200
-      next(error)
-    }).finally(() => {
-      if (outCon) {
-        outCon.release()
+      const now = new Date().getTime()
+      if (expire < now) {
+        reject(new WechatError({errCode: 1002, errMsg: 'token已过期，请重新登录'}))
       }
+      const needRefreshToken = now + env.tokenRefreshPeriod * 1000 >= expire
+      let outCon = null
+      let refreshedToken = null
+      return db.getConnection().then(connection => {
+        outCon = connection
+        return db.execute(connection, `select server_user_id, token, expire_time from t_user_token where server_user_id = ? 
+          and token = ? and del_flag = 0 and expire_time > sysdate()`, [serverUserId, token])
+      }).then(({connection, results, fields}) => {
+        const tokenList = util.transferFromList(results, fields)
+        if (tokenList.length === 0) {
+          reject(new WechatError({errCode: 1003, errMsg: '无法识别token，请重新登录'}))
+        }
+        if (needRefreshToken) {
+          const {token: newToken, expireDate} = util.encodeToken({serverUserId, channelId})
+          refreshedToken = newToken
+          return db.execute(connection, 'update t_user_token set token = ?, expire_time = ?, del_flag = 0, update_time = sysdate(), row_version = row_version + 1 ',
+            [newToken, expireDate])
+        } else {
+          return Promise.resolve({})
+        }
+      }).then(() => {
+        if (needRefreshToken) {
+          refreshHandler({serverChatId: serverUserId, token: refreshedToken})
+        }
+        nextHandler()
+      }).catch(error => {
+        reject(new WechatError({errCode: 1004, errMsg: `未知异常：${error.errMsg || error.message}`}))
+      }).finally(() => {
+        if (outCon) {
+          outCon.release()
+        }
+      })
+    })).catch(error => {
+      errorHandler({serverChatId: serverUserId, error})
     })
   }
   this.getListSql = ({length, fillStr = '?', separator = ',', open = '(', close = ')'}) => (

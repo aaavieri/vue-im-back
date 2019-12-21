@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
-const env = require('../config/env');
 const util = require('../util/util');
-const jwt = require('jwt-simple');
+const {server: {refreshToken: refreshHandler}} = require('../util/socket')
+
 // const moment = require('moment');
 
 /* GET users listing. */
@@ -26,7 +26,8 @@ router.post('/login', (req, res, next) => {
     Object.assign(req.session, data)
     res.append('token', token)
     return db.execute(connection, `insert into t_user_token (server_user_id, token, login_time, expire_time) values (?, ?, sysdate(), ?) 
-      on duplicate key update token = ?, expire_time = ?, update_time = sysdate(), row_version = row_version + 1 `, [userInfo.serverUserId, token, expireDate, token, expireDate])
+      on duplicate key update token = ?, login_time = sysdate(), expire_time = ?, update_time = sysdate(), del_flag = 0, row_version = row_version + 1 `,
+      [userInfo.serverUserId, token, expireDate, token, expireDate])
   }).then(() => {
     res.json(util.getSuccessData(data))
   }).catch(error => {
@@ -50,5 +51,37 @@ router.post('/checkLogin', function(req, res) {
     errMsg: success ? null : '您尚未登录，请前往登录页面登录'
   })
 });
+
+router.use((req, res, next) => {
+  const {token} = req.headers
+  util.tokenChecker({
+    data: {serverChatToken: token},
+    nextHandler: () => next(),
+    refreshHandler,
+    errorHandler: ({error}) => {
+      error.status = 200
+      next(error)
+    }
+  })
+})
+router.post('/logout', (req, res, next) => {
+  delete req.session.userInfo
+  const {serverUserId} = req.body
+  let outCon = null
+  db.getConnection().then((connection) => {
+    outCon = connection
+    return db.execute(connection, 'update t_user_token del_flag = 1, row_version = row_version + 1 where server_user_id = ? and del_flag = 0',
+      [serverUserId])
+  }).then(() => {
+    res.json(util.getSuccessData({}))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 
 module.exports = router;
