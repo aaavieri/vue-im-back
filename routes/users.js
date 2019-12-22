@@ -14,7 +14,7 @@ router.post('/login', (req, res, next) => {
   db.getConnection().then(connection => {
     outCon = connection
     return db.execute(connection, 'select server_user_id, server_user_account, channel_id, server_user_pass, server_user_name, settings from t_user' +
-      ' where server_user_id = ? and del_flag = 0', [userAccount])
+      ' where server_user_account = ? and del_flag = 0', [userAccount])
   }).then(({connection, results, fields}) => {
     const [userInfo = {}] = util.transferFromList(results, fields)
     if (userInfo.serverUserPass !== password) {
@@ -70,7 +70,7 @@ router.post('/logout', (req, res, next) => {
   let outCon = null
   db.getConnection().then((connection) => {
     outCon = connection
-    return db.execute(connection, 'update t_user_token del_flag = 1, row_version = row_version + 1 where server_user_id = ? and del_flag = 0',
+    return db.execute(connection, 'update t_user_token set del_flag = 1, row_version = row_version + 1 where server_user_id = ? and del_flag = 0',
       [serverUserId])
   }).then(() => {
     res.json(util.getSuccessData({}))

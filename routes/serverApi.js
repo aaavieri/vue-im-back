@@ -84,12 +84,25 @@ router.get('/getInitData', function(req, res, next) {
   const {serverUserId} = util.decodeToken(token)
   const sessionList = []
   const historyList = []
+  const leaveQuickReply = {replyContent: '客服暂时离开，请稍后。'}
+  const commonQuickReplyList = []
   db.getConnection().then(connection => {
     outCon = connection
-    return db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session' +
-      ' where server_user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId])
-  }).then(({connection, results, fields}) => {
-    util.getLatestSession(util.transferFromList(results, fields)).forEach(session => sessionList.push(session))
+    return Promise.all([db.execute(connection, 'select session_id, open_id, start_time, end_time from t_chat_session ' +
+        'where server_user_id = ? and del_flag = 0 order by session_id desc limit 10', [serverUserId]),
+      db.execute(connection, 'select quick_reply_id, server_user_id, type, reply_content from t_user_quick_reply ' +
+        'where del_flag = 0 and server_user_id = ?', [serverUserId])]
+    )
+  }).then(([{connection, results: sessionResults, fields: sessionFields}, {results: replyResults, fields: replyFields}]) => {
+    util.getLatestSession(util.transferFromList(sessionResults, sessionFields)).forEach(session => sessionList.push(session))
+    const replyList = util.transferFromList(replyResults, replyFields)
+    replyList.forEach(reply => {
+      if (reply.type === 1) {
+        Object.assign(leaveQuickReply, reply)
+      } else {
+        commonQuickReplyList.push(reply)
+      }
+    })
     if (sessionList.length > 0) {
       const searchHistoryStatement = `select history_id, session_id, message, message_type, type, create_time from t_chat_history where session_id in
         ${util.getListSql({length: sessionList.length})} and del_flag = 0`
@@ -126,7 +139,7 @@ router.get('/getInitData', function(req, res, next) {
         msgList: historyList.filter(history => history.sessionId === session.sessionId).map(wechat.wrapMsg)
       }
     })
-    res.json(util.getSuccessData({sessionList: data, server}))
+    res.json(util.getSuccessData({sessionList: data, server, leaveQuickReply, commonQuickReplyList}))
   }).catch(error => {
     error.status = 200
     next(error)
@@ -378,5 +391,30 @@ router.post('/upload', upload.single('uploadFile'), function(req, res) {
   //   });
   // });
 });
+
+router.post('/saveQuickReply', function (req, res, next) {
+  let outCon = null
+  const {token} = req.headers
+  const {serverUserId} = util.decodeToken(token)
+  const {type, quickReplyId = 0, replyContent} = req.body
+  db.getConnection().then(connection => {
+    outCon = connection
+    if (quickReplyId === 0) {
+      return db.execute(connection, 'insert into t_user_quick_reply (server_user_id, type, reply_content) values (?, ?, ?)', [serverUserId, type, replyContent])
+    } else {
+      return db.execute(connection, 'update t_user_quick_reply set reply_content = ?, update_time = sysdate(), ' +
+        'row_version = row_version + 1 where quick_reply_id = ? and del_flag = 0', [replyContent, serverUserId])
+    }
+  }).then(({results: {insertId}}) => {
+    res.json(util.getSuccessData(quickReplyId === 0 ? insertId : quickReplyId))
+  }).catch(error => {
+    error.status = 200
+    next(error)
+  }).finally(() => {
+    if (outCon) {
+      outCon.release()
+    }
+  })
+})
 
 module.exports = router;

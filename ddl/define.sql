@@ -65,12 +65,26 @@ CREATE TABLE `t_client_info` (
   `user_name` varchar(50) NOT NULL COMMENT '客户昵称' default '',
   `avatar` varchar(50) NULL COMMENT '头像地址',
   `phone_num` varchar(11) NULL COMMENT '客户手机号',
-  `user_status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '用户状态',
-  `del_flag` tinyint(4) NOT NULL DEFAULT '0' COMMENT '删除标志',
+  `user_status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '用户状态',
+  `del_flag` tinyint(1) NOT NULL DEFAULT '0' COMMENT '删除标志',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
   `update_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '更新者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
   PRIMARY KEY (`channel_id`, `open_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE `t_user_quick_reply` (
+  `quick_reply_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '快速答复ID',
+  `server_user_id` int(11) NOT NULL COMMENT '客服ID',
+  `type` tinyint(1) NOT NULL COMMENT '快速回复内容',
+  `reply_content` varchar(50) NOT NULL COMMENT '快速回复内容',
+  `del_flag` tinyint(4) NOT NULL DEFAULT '0' COMMENT '删除标志',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+  `update_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '更新者',
+  `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
+  PRIMARY KEY (`quick_reply_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
