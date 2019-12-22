@@ -35,7 +35,7 @@ CREATE TABLE `t_chat_history` (
   `message_type` tinyint(1) NOT NULL DEFAULT '1' COMMENT '消息类型：1：文本，2：图片，3：语音',
   `type` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0：客户到客服，1：客服到客户',
   `del_flag` tinyint(1) NOT NULL DEFAULT '0' COMMENT '删除标志',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_time` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_user` varchar(10) NOT NULL DEFAULT 'system' COMMENT '创建者',
   `row_version` int(11) NOT NULL DEFAULT '1' COMMENT '版本',
   PRIMARY KEY (`history_id`),

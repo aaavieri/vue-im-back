@@ -229,7 +229,9 @@ const util = new function () {
   this.splitMessage = ({message, ...other}) => (
     this.cutArray(message, env.maxMessageLength).map(item => ({...other, message: item}))
   )
-  this.combineMessage = (messageList) => this.groupToArr(messageList, 'createTime').map(message => (
+  this.combineMessage = (messageList) => this.groupToArr(messageList,
+    message => `${message.sessionId}|${message.messageType}|${message.type}|${message.createTime}|`, 'dataList',
+    (item, value) => item.key = value).map(message => (
     message.dataList.reduce((m1, m2) => {
       m1.message += m2.message
       return m1

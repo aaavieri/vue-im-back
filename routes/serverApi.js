@@ -7,11 +7,16 @@ const {wechat, server: {refreshToken: refreshHandler}} = require('../util/socket
 const xlsx = require('node-xlsx')
 const urlencode = require('urlencode');
 const multer  = require('multer');
+const fs = require('fs');
 
 const storage = multer.diskStorage({
   destination: function destination(req, file, cb) {
     // 文件上传成功后会放入public下的upload文件夹
-    cb(null, env.fileSavePath);
+    const savePath = `${env.fileSavePath}/${util.dateFormat(new Date(), 'yyyyMMdd')}`
+    if (!fs.existsSync(savePath)) {
+      fs.mkdirSync(savePath)
+    }
+    cb(null, savePath);
   },
   filename: function filename(req, file, cb) {
     // 设置文件的名字为其原本的名字，也可以添加其他字符，来区别相同文件，例如file.originalname+new Date().getTime();利用时间来区分
